@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8f9fa; }
+    #realTimeLog { max-height: 300px; overflow-y: auto; background-color: #f8f9fa; border-radius: 4px; padding: 10px; margin-bottom: 15px; border: 1px solid #dee2e6; }
+    .log-entry { padding: 8px; border-bottom: 1px solid #eee; margin-bottom: 5px; background-color: white; border-radius: 4px; }
+    .log-success { border-left: 4px solid #28a745; }
+    .log-error { border-left: 4px solid #dc3545; }
+    .log-warning { border-left: 4px solid #ffc107; }
+    .log-info { border-left: 4px solid #17a2b8; }
+    .step { display: none; padding: 25px; background-color: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-top: 15px; }
+    .step.active { display: block; }
+    .nav-tabs .nav-link { border: none; color: #495057; font-weight: 500; padding: 12px 20px; }
+    .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 3px solid #0d6efd; background-color: transparent; }
+    .nav-tabs .nav-link.disabled { color: #6c757d; }
+    .mapping-row { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+    .select2-container { width: 100% !important; }
+    .card { border: none; box-shadow: 0 2px 15px rgba(0,0,0,0.08); border-radius: 8px; overflow: hidden; }
+    .card-header { background-color: #f8f9fa; border-bottom: 1px solid #dee2e6; font-weight: 600; padding: 15px 20px; }
+    .card-body { padding: 20px; }
+    .status-badge { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; margin-right: 8px; }
+    .status-badge.success { background-color: #28a745; color: white; }
+    .status-badge.error { background-color: #dc3545; color: white; }
+    #fileInput { padding: 10px; border: 2px dashed #dee2e6; border-radius: 8px; }
+    #fileInput:hover { border-color: #0d6efd; }
+    .btn { padding: 8px 16px; border-radius: 6px; font-weight: 500; }
+    .import-summary { background-color: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+    .import-summary-item { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .import-summary-value { font-weight: 600; }
+    .category-mapping { border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; margin-bottom: 8px; }
+    .adminit-category { min-width: 120px; background-color: #f8f9fa; border-right: none; display: flex; align-items: center; padding: 0 12px; }
+    #customProgress { font-size: 1.25rem; font-weight: bold; margin-bottom: 16px; text-align: center; }
+    pre.woocommerce-message { white-space: pre-wrap; word-break: break-word; font-size:13px; background:#f8f9fa; border-radius:6px; padding:8px 10px; }
+  </style>
+</head>
+<body>
+  <div class="container py-4">
+    <div class="card">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <div>
+          <h3 class="mb-0">Importador Adminit → WooCommerce</h3>
+          <small class="text-muted">Importación masiva con gestión de inventario</small>
+        </div>
+        <div id="connectionStatus" class="badge bg-secondary">No conectado</div>
+      </div>
+      <div class="card-body p-0">
+        <ul class="nav nav-tabs card-header-tabs px-3 pt-3">
+          <li class="nav-item"><a class="nav-link active" href="#" data-step="step1">1. Subir Archivo</a></li>
+          <li class="nav-item"><a class="nav-link disabled" href="#" data-step="step2">2. Mapear Campos</a></li>
+          <li class="nav-item"><a class="nav-link disabled" href="#" data-step="step3">3. Importar</a></li>
+        </ul>
+        <div class="p-4">
+          <!-- Paso 1: Subir archivo -->
+          <div id="step1" class="step active">
+            <h4 class="mb-4">Sube tu archivo de Adminit</h4>
+            <div class="mb-4">
+              <label for="fileInput" class="form-label">Selecciona tu archivo CSV</label>
+              <input type="file" id="fileInput" class="form-control" accept=".xlsx,.xls,.csv">
+              <small class="form-text text-muted">Formatos soportados: CSV</small>
+            </div>
+            <div id="uploadResult" class="alert mb-3" style="display:none;"></div>
+            <div class="d-flex justify-content-end">
+              <button id="btnUpload" class="btn btn-primary">
+                <span id="uploadSpinner" class="spinner-border spinner-border-sm me-2" style="display:none;"></span>
+                Procesar Archivo
+              </button>
+            </div>
+          </div>
+          <!-- Paso 2: Mapear campos -->
+          <div id="step2" class="step">
+            <h4 class="mb-4">Mapeo de Campos</h4>
+            <p class="text-muted mb-4">Asigna las columnas de tu archivo a los campos requeridos por WooCommerce</p>
+            <div id="fieldMappings" class="mb-4"></div>
+            <h5 class="mt-4 mb-3">Mapeo de Categorías</h5>
+            <div id="categoryMappings" class="mb-4"></div>
+            <div id="testResult" class="alert mt-3" style="display:none;"></div>
+            <div class="d-flex justify-content-between mt-4">
+              <button id="btnBackStep1" class="btn btn-outline-secondary">← Volver</button>
+              <div>
+                <button id="btnTestConnection" class="btn btn-outline-primary me-2">
+                  <span id="testSpinner" class="spinner-border spinner-border-sm me-2" style="display:none;"></span>
+                  Probar Conexión
+                </button>
+                <button id="btnContinue" class="btn btn-primary">Continuar a Importación →</button>
+              </div>
+            </div>
+          </div>
+          <!-- Paso 3: Importar -->
+          <div id="step3" class="step">
+            <h4 class="mb-4">Importar Productos</h4>
+            <div class="import-summary mb-4">
+              <h5 class="mb-3">Resumen de Importación</h5>
+              <div class="import-summary-item">
+                <span>Total de productos:</span>
+                <span id="totalProducts" class="import-summary-value">0</span>
+              </div>
+              <div class="import-summary-item">
+                <span>Duración estimada:</span>
+                <span id="estimatedTime" class="import-summary-value">-</span>
+              </div>
+            </div>
+            <div class="d-flex justify-content-between mb-4">
+              <button id="btnBackStep2" class="btn btn-outline-secondary">← Volver a Mapeo</button>
+              <div>
+                <button id="btnStartImport" class="btn btn-success me-2">
+                  <span id="importSpinner" class="spinner-border spinner-border-sm me-2" style="display:none;"></span>
+                  Iniciar Importación
+                </button>
+                <button id="btnCancelImport" class="btn btn-outline-danger" style="display:none;">Cancelar Importación</button>
+              </div>
+            </div>
+            <div id="customProgress" class="mb-4">0/0</div>
+            <div class="mb-4">
+              <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <span>Registro en Tiempo Real</span>
+                  <span class="badge bg-primary" id="progressText">0/0</span>
+                </div>
+                <div id="realTimeLog" class="card-body p-3">
+                  <div class="text-center text-muted py-3">Esperando inicio de importación...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Templates -->
+  <template id="fieldMappingTemplate">
+    <div class="row mapping-row align-items-center">
+      <div class="col-md-4">
+        <label class="form-label">
+          <span class="field-label"></span>
+          <small class="text-muted d-block field-description"></small>
+        </label>
+      </div>
+      <div class="col-md-8">
+        <select class="form-select field-mapping">
+          <option value="">-- Seleccionar columna --</option>
+        </select>
+      </div>
+    </div>
+  </template>
+  <template id="categoryMappingTemplate">
+    <div class="category-mapping mb-2">
+      <div class="input-group">
+        <span class="input-group-text adminit-category"></span>
+        <select class="form-select woo-category-select">
+          <option value="">Seleccionar categoría WooCommerce</option>
+        </select>
+      </div>
+    </div>
+  </template>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <script>
+  $(document).ready(function() {
+    let fileInfo = null;
+    let importInProgress = false;
+    let cancelImport = false;
+    let pollingInterval = null;
+    let estimatedTime = 0;
+    let wooCategories = [];
+
+    $('.field-mapping').select2();
+    loadWooCommerceCategories();
+
+    $('[data-step]').click(function(e) {
+      e.preventDefault();
+      if ($(this).hasClass('disabled')) return;
+      showStep($(this).data('step'));
+    });
+
+    $('#btnBackStep1').click(() => showStep('step1'));
+    $('#btnBackStep2').click(() => showStep('step2'));
+    $('#btnUpload').click(uploadFile);
+    $('#btnTestConnection').click(testConnection);
+    $('#btnContinue').click(function() {
+      const mappings = saveMappings();
+      if (mappings) {
+        showStep('step3');
+        updateImportSummary();
+      }
+    });
+    $('#btnStartImport').click(startImport);
+    $('#btnCancelImport').click(cancelCurrentImport);
+
+    async function loadWooCommerceCategories() {
+      try {
+        wooCategories = await google.script.run
+          .withFailureHandler(() => [])
+          .getWooCommerceCategories();
+      } catch (error) { }
+    }
+
+    function showStep(stepId) {
+      $('.step').removeClass('active');
+      $('#' + stepId).addClass('active');
+      $('.nav-link').removeClass('active disabled');
+      $(`[data-step="${stepId}"]`).addClass('active');
+      let enableNext = false;
+      $('.nav-link').each(function() {
+        if ($(this).data('step') === stepId) enableNext = true;
+        if (!enableNext) $(this).removeClass('disabled');
+      });
+      if (stepId === 'step2' && fileInfo) {
+        setupFieldMappings(fileInfo.headers);
+        setupCategoryMappings(fileInfo.headers, fileInfo.sampleData);
+      }
+    }
+
+    function setupFieldMappings(headers) {
+      const requiredFields = [
+        { woo: 'name', label: 'Nombre del Producto', required: true, description: 'Nombre completo del producto' },
+        { woo: 'regular_price', label: 'Precio Regular', required: true, description: 'Precio sin descuento' },
+        { woo: 'description', label: 'Descripción', required: false, description: 'Descripción detallada del producto' },
+        { woo: 'inventario', label: 'Inventario', required: true, description: 'Cantidad disponible en stock' },
+        { woo: 'sku', label: 'SKU', required: false, description: 'Código único de identificación' },
+        { woo: 'Categoria', label: 'Categoría', required: true, description: 'Columna de categoría del archivo para WooCommerce' }
+      ];
+      const mappingsContainer = $('#fieldMappings').empty();
+      const template = $('#fieldMappingTemplate').html();
+      requiredFields.forEach(field => {
+        const clone = $(template);
+        clone.find('.field-label').text(field.label + (field.required ? ' *' : ''));
+        clone.find('.field-description').text(field.description);
+        const select = clone.find('.field-mapping')
+          .attr('data-woo', field.woo)
+          .prop('required', field.required);
+        headers.forEach(header => {
+          select.append(`<option value="${header}">${header}</option>`);
+        });
+        mappingsContainer.append(clone);
+      });
+      $('.field-mapping').select2();
+    }
+
+    function setupCategoryMappings(headers, sampleData) {
+      const container = $('#categoryMappings').empty();
+      const template = $('#categoryMappingTemplate').html();
+      const categoryIndex = headers.indexOf('Categoría');
+      if (categoryIndex === -1) return;
+      const categories = [...new Set([
+        sampleData[categoryIndex],
+        'Ropa', 'Accesorios', 'Calzado'
+      ])].filter(Boolean);
+      categories.forEach(cat => {
+        const clone = $(template);
+        clone.find('.adminit-category').text(cat);
+        const select = clone.find('.woo-category-select');
+        wooCategories.forEach(wooCat => {
+          select.append(`<option value="${wooCat.id}">${wooCat.name}</option>`);
+        });
+        container.append(clone);
+      });
+      $('.woo-category-select').select2();
+    }
+
+    function saveMappings() {
+      const mappings = { fieldMappings: {}, categoryMappings: {} };
+      let valid = true;
+      $('.field-mapping').each(function() {
+        const wooField = $(this).data('woo');
+        const value = $(this).val();
+        if ($(this).prop('required') && !value) {
+          valid = false;
+          $(this).addClass('is-invalid');
+        } else {
+          mappings.fieldMappings[wooField] = value;
+        }
+      });
+      $('.woo-category-select').each(function() {
+        const adminitCat = $(this).prev('.adminit-category').text();
+        mappings.categoryMappings[adminitCat] = $(this).val();
+      });
+      if (!valid) {
+        showAlert('Debes mapear todos los campos requeridos', 'danger');
+        return null;
+      }
+      return mappings;
+    }
+
+    function uploadFile() {
+      const fileInput = $('#fileInput')[0];
+      if (!fileInput.files.length) {
+        showAlert('Por favor selecciona un archivo', 'danger');
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      $('#uploadSpinner').show();
+      $('#btnUpload').prop('disabled', true);
+      reader.onload = (e) => {
+        const base64Data = e.target.result.split(',')[1];
+        google.script.run
+          .withSuccessHandler((result) => {
+            $('#uploadSpinner').hide();
+            $('#btnUpload').prop('disabled', false);
+            if (result.success) {
+              fileInfo = result;
+              showAlert(`✅ Archivo procesado: ${result.rowCount} productos`, 'success');
+              showStep('step2');
+            } else {
+              showAlert('❌ ' + result.message, 'danger');
+            }
+          })
+          .withFailureHandler((error) => {
+            $('#uploadSpinner').hide();
+            $('#btnUpload').prop('disabled', false);
+            showAlert('❌ Error: ' + error.message, 'danger');
+          })
+          .procesarArchivo(base64Data, file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function testConnection() {
+      $('#testSpinner').show();
+      $('#btnTestConnection').prop('disabled', true);
+      $('#connectionStatus').removeClass('bg-success bg-danger').addClass('bg-secondary').text('Probando...');
+      google.script.run
+        .withSuccessHandler((result) => {
+          $('#testSpinner').hide();
+          $('#btnTestConnection').prop('disabled', false);
+          const alertClass = result.success ? 'alert-success' : 'alert-danger';
+          $('#testResult')
+            .removeClass('alert-success alert-danger')
+            .addClass(alertClass)
+            .html(result.message)
+            .show();
+          $('#connectionStatus')
+            .removeClass('bg-secondary bg-danger')
+            .addClass(result.success ? 'bg-success' : 'bg-danger')
+            .text(result.success ? 'Conectado' : 'Error');
+        })
+        .probarConexion();
+    }
+
+    function startImport() {
+      const mappings = saveMappings();
+      if (!mappings) return;
+      importInProgress = true;
+      cancelImport = false;
+      $('#importSpinner').show();
+      $('#btnStartImport').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Importando...');
+      $('#btnCancelImport').show().prop('disabled', false);
+      $('#realTimeLog').html('<div class="text-center text-muted py-3">Iniciando importación...</div>');
+      google.script.run
+        .withSuccessHandler(handleImportComplete)
+        .withFailureHandler(handleImportError)
+        .importarProductos(mappings.fieldMappings, fileInfo.sheetName, mappings.categoryMappings);
+      startProgressPolling();
+    }
+
+    function handleImportComplete(response) {
+      importInProgress = false;
+      clearInterval(pollingInterval);
+      $('#importSpinner').hide();
+      $('#btnStartImport').prop('disabled', false).text('Reintentar Importación');
+      $('#btnCancelImport').hide();
+      const { summary } = response;
+      const resultClass = summary.errors > 0 ? (summary.success > 0 ? 'warning' : 'danger') : 'success';
+      addRealTimeLog(
+        `🏁 Importación completada en ${summary.duration}. ${summary.success} éxitos, ${summary.errors} errores`,
+        resultClass
+      );
+      $('#customProgress').text(`${summary.total}/${summary.total}`);
+      $('#progressText').text(`${summary.total}/${summary.total}`);
+    }
+
+    function handleImportError(error) {
+      importInProgress = false;
+      clearInterval(pollingInterval);
+      $('#importSpinner').hide();
+      $('#btnStartImport').prop('disabled', false).text('Reintentar Importación');
+      $('#btnCancelImport').hide();
+      addRealTimeLog('❌ Error crítico: ' + error.message, 'error');
+    }
+
+    function cancelCurrentImport() {
+      cancelImport = true;
+      $('#btnCancelImport').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Cancelando...');
+      addRealTimeLog('🛑 Solicitando cancelación...', 'warning');
+      google.script.run
+        .withSuccessHandler((result) => {
+          addRealTimeLog(`🛑 Importación cancelada: ${result.imported} productos importados`, 'warning');
+          $('#btnCancelImport').hide();
+        })
+        .cancelarImportacion();
+    }
+
+    function startProgressPolling() {
+      if (pollingInterval) clearInterval(pollingInterval);
+      pollingInterval = setInterval(() => {
+        if (!importInProgress) return;
+        google.script.run
+          .withSuccessHandler(updateProgress)
+          .actualizarProgresoCliente();
+      }, 500);
+    }
+
+    // ¡ACTUALIZADA! Muestra en tiempo real el mensaje de WooCommerce para cada producto
+    function updateProgress(data) {
+      $('#customProgress').text(`${data.current}/${data.total}`);
+      $('#progressText').text(`${data.current}/${data.total}`);
+      if (data.result) {
+        let msg = '';
+        let type = '';
+        let wcMsg = '';
+        if (data.result.woocommerceMessage) {
+          try {
+            const parsed = JSON.parse(data.result.woocommerceMessage);
+            wcMsg = `<pre class="woocommerce-message">${JSON.stringify(parsed, null, 2)}</pre>`;
+          } catch {
+            wcMsg = `<pre class="woocommerce-message">${data.result.woocommerceMessage}</pre>`;
+          }
+        }
+        if (data.result.status === 'success') {
+          msg = `✔️ Producto importado: <b>${data.result.productName}</b> (${data.result.productId || ''}) ${wcMsg}`;
+          type = 'success';
+        } else {
+          msg = `❌ Error en producto: <b>${data.result.productName}</b> - ${data.result.message}${wcMsg}`;
+          type = 'error';
+        }
+        addRealTimeLog(msg, type);
+      }
+      if (!data.isRunning) {
+        clearInterval(pollingInterval);
+        $('#customProgress').text(`${data.total}/${data.total}`);
+        $('#progressText').text(`${data.total}/${data.total}`);
+      }
+    }
+
+    function addRealTimeLog(message, type) {
+      const typeClass = {
+        'success': 'log-success',
+        'error': 'log-error',
+        'warning': 'log-warning',
+        'info': 'log-info'
+      }[type] || '';
+      const now = new Date().toLocaleTimeString();
+      const icon = {
+        'success': '✅',
+        'error': '❌',
+        'warning': '⚠️',
+        'info': 'ℹ️'
+      }[type] || '';
+      if ($('#realTimeLog').text().includes('Esperando inicio')) {
+        $('#realTimeLog').empty();
+      }
+      const logEntry = $(`
+        <div class="log-entry ${typeClass}">
+          <small class="text-muted me-2">[${now}]</small> 
+          ${icon} ${message}
+        </div>
+      `);
+      $('#realTimeLog').append(logEntry);
+      $('#realTimeLog').scrollTop($('#realTimeLog')[0].scrollHeight);
+    }
+
+    function updateImportSummary() {
+      if (!fileInfo) return;
+      $('#totalProducts').text(fileInfo.rowCount);
+      estimatedTime = Math.ceil(fileInfo.rowCount * 2.5 / 60);
+      $('#estimatedTime').text(estimatedTime > 1 ? `${estimatedTime} minutos` : '<1 minuto');
+      $('#customProgress').text(`0/${fileInfo.rowCount}`);
+      $('#progressText').text(`0/${fileInfo.rowCount}`);
+    }
+
+    function showAlert(message, type) {
+      const alert = $('#uploadResult, #testResult')
+        .removeClass('alert-success alert-danger alert-warning')
+        .addClass('alert-' + type)
+        .html(message)
+        .show();
+      setTimeout(() => alert.fadeOut(), 5000);
+    }
+  });
+  </script>
+</body>
+</html>
