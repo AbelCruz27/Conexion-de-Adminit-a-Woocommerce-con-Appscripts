@@ -5,9 +5,9 @@
 
 // Configuración de credenciales
 const CONFIG = {
-  wooUrl: 'https://elclosetmodajoven.com/',
-  consumerKey: 'ck_80e5410565a73b20e2da1ed4de2592c247d530fb',
-  consumerSecret: 'cs_4df438f909f2d75a507468b549eae028ac715a10'
+  wooUrl: '',
+  consumerKey: '',
+  consumerSecret: ''
 };
 
 var importStatus = {
